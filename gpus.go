@@ -36,17 +36,24 @@ func GPUsGetMetrics() *GPUsMetrics {
 }
 
 func ParseAllocatedGPUs() float64 {
-	var num_gpus = 0.0
+	var num_gpus float64
 
-	args := []string{"-a", "-X", "--format=Allocgres", "--state=RUNNING", "--noheader", "--parsable2"}
-	output := string(Execute("sacct", args))
-	if len(output) > 0 {
-		for _, line := range strings.Split(output, "\n") {
-			if len(line) > 0 {
-				line = strings.Trim(line, "\"")
-				descriptor := strings.TrimPrefix(line, "gpu:")
-				job_gpus, _ := strconv.ParseFloat(descriptor, 64)
-				num_gpus += job_gpus
+	args := []string{"-a", "-X", "--format=AllocTRES", "--state=RUNNING", "--noheader", "--parsable2"}
+	output := Execute("sacct", args) // Ensure Execute returns a []byte
+	for _, line := range strings.Split(string(output), "\n") {
+		line = strings.Trim(line, "\"")
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, ",")
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if strings.HasPrefix(part, "gres/gpu=") {
+				descriptor := strings.TrimPrefix(part, "gres/gpu=")
+				job_gpus, err := strconv.ParseFloat(descriptor, 64)
+				if err == nil {
+					num_gpus += job_gpus
+				}
 			}
 		}
 	}
@@ -55,21 +62,36 @@ func ParseAllocatedGPUs() float64 {
 }
 
 func ParseTotalGPUs() float64 {
-	var num_gpus = 0.0
+	var num_gpus float64
 
-	args := []string{"-h", "-o \"%n %G\""}
-	output := string(Execute("sinfo", args))
-	if len(output) > 0 {
-		for _, line := range strings.Split(output, "\n") {
-			if len(line) > 0 {
-				line = strings.Trim(line, "\"")
-				descriptor := strings.Fields(line)[1]
-				descriptor = strings.TrimPrefix(descriptor, "gpu:")
-				descriptor = strings.Split(descriptor, "(")[0]
-				node_gpus, _ :=  strconv.ParseFloat(descriptor, 64)
-				num_gpus += node_gpus
-			}
+	args := []string{"-h", "-o", "%n %G"} // Corrected arguments
+	output := Execute("sinfo", args)      // Ensure Execute returns []byte
+
+	for _, line := range strings.Split(string(output), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
 		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue // Skip lines without enough data
+		}
+		gpuField := fields[1] // Second field is the GPU info (e.g., "gpu:a100:4")
+		if !strings.HasPrefix(gpuField, "gpu:") {
+			continue // Skip lines without GPU data
+		}
+		// Split into parts: ["gpu", "a100", "4"]
+		parts := strings.Split(gpuField, ":")
+		if len(parts) < 3 {
+			continue // Malformed GPU field
+		}
+		countStr := parts[2] // Third part is the count
+		// Parse the count (e.g., "4" -> 4.0)
+		count, err := strconv.ParseFloat(countStr, 64)
+		if err != nil {
+			continue // Invalid number, skip
+		}
+		num_gpus += count
 	}
 
 	return num_gpus

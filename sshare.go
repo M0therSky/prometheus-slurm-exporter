@@ -25,7 +25,7 @@ import (
 )
 
 func FairShareData() []byte {
-        cmd := exec.Command( "sshare", "-n", "-P", "-o", "account,fairshare" )
+        cmd := exec.Command( "sshare", "-n","-a","-U","-P", "-o", "user,fairshare" )
         stdout, err := cmd.StdoutPipe()
         if err != nil {
                 log.Fatal(err)
